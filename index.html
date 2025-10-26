@@ -340,7 +340,7 @@
                 dayDiv.innerHTML = `<div class="day-number">${i}</div><div class="dots"></div>`;
                 
                 // 为某些日期添加示例任务点（模拟学习内容）
-                if (Math.random() > 0.7) { // 30%概率有任务
+                if (Math.random() > 0.9) { // 10%概率有任务
                     const dotsDiv = dayDiv.querySelector('.dots');
                     const taskTypes = ['school', 'extra', 'preview', 'other'];
                     const taskCount = Math.floor(Math.random() * 3) + 1; // 1-3个任务
