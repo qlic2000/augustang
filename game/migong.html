@@ -95,7 +95,7 @@
         const cols = Math.floor(canvas.width / cellSize);   // 迷宫列数
         
         // 玩家配置参数
-        const playerSize = cellSize / 4; // 玩家方块大小为格子的1/4
+        const playerSize = cellSize - 2; // 玩家方块大小扩大到几乎填满整个格子
         let player = {
             row: 0,      // 玩家初始行位置
             col: 1,      // 玩家初始列位置
@@ -105,6 +105,9 @@
         
         // 敌人数组
         let enemies = [];
+        
+        // 炸弹数组
+        let bombs = [];
         
         // 玩家移动计数器（用于控制敌人移动频率）
         let playerMoveCount = 0;
@@ -351,6 +354,140 @@
         }
         
         /**
+         * 绘制所有炸弹
+         */
+        function drawBombs() {
+            ctx.fillStyle = 'black';
+            for (let bomb of bombs) {
+                const bombSize = playerSize / 2;
+                const x = bomb.col * cellSize + (cellSize - bombSize) / 2;
+                const y = bomb.row * cellSize + (cellSize - bombSize) / 2;
+                ctx.fillRect(x, y, bombSize, bombSize);
+            }
+        }
+        
+        /**
+         * 在指定位置放置炸弹
+         */
+        function placeBomb() {
+            // 检查是否已经在该位置放置了炸弹
+            for (let bomb of bombs) {
+                if (bomb.row === player.row && bomb.col === player.col) {
+                    return; // 如果已经有一个炸弹在该位置，则不放置新炸弹
+                }
+            }
+            
+            // 添加新炸弹
+            const bomb = {
+                row: player.row,
+                col: player.col,
+                timer: 7 // 7秒后爆炸
+            };
+            bombs.push(bomb);
+            drawBombs();
+        }
+        
+        /**
+         * 处理炸弹爆炸
+         */
+        function handleBombExplosions() {
+            for (let i = bombs.length - 1; i >= 0; i--) {
+                bombs[i].timer -= 1;
+                
+                if (bombs[i].timer <= 0) {
+                    // 炸弹爆炸
+                    const bombRow = bombs[i].row;
+                    const bombCol = bombs[i].col;
+                    
+                    // 移除爆炸的炸弹
+                    bombs.splice(i, 1);
+                    
+                    // 处理爆炸效果
+                    explode(bombRow, bombCol);
+                }
+            }
+        }
+        
+        /**
+         * 爆炸效果处理
+         */
+        function explode(bombRow, bombCol) {
+            // 创建爆炸范围内的坐标列表
+            const explosionArea = [];
+            
+            // 向上
+            for (let i = 1; i <= 4; i++) {
+                const row = bombRow - i;
+                const col = bombCol;
+                if (row < 0 || maze[row][col] === 1) break; // 遇到墙体停止
+                explosionArea.push({row, col});
+            }
+            
+            // 向下
+            for (let i = 1; i <= 4; i++) {
+                const row = bombRow + i;
+                const col = bombCol;
+                if (row >= rows || maze[row][col] === 1) break; // 遇到墙体停止
+                explosionArea.push({row, col});
+            }
+            
+            // 向左
+            for (let i = 1; i <= 4; i++) {
+                const row = bombRow;
+                const col = bombCol - i;
+                if (col < 0 || maze[row][col] === 1) break; // 遇到墙体停止
+                explosionArea.push({row, col});
+            }
+            
+            // 向右
+            for (let i = 1; i <= 4; i++) {
+                const row = bombRow;
+                const col = bombCol + i;
+                if (col >= cols || maze[row][col] === 1) break; // 遇到墙体停止
+                explosionArea.push({row, col});
+            }
+            
+            // 添加炸弹所在位置
+            explosionArea.push({row: bombRow, col: bombCol});
+            
+            // 绘制爆炸效果
+            ctx.fillStyle = 'orange';
+            for (let pos of explosionArea) {
+                ctx.fillRect(pos.col * cellSize, pos.row * cellSize, cellSize, cellSize);
+            }
+            
+            // 检查是否有敌人在爆炸范围内
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                for (let pos of explosionArea) {
+                    if (enemy.row === pos.row && enemy.col === pos.col) {
+                        // 移除被炸到的敌人
+                        enemies.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+            
+            // 检查玩家是否在爆炸范围内
+            for (let pos of explosionArea) {
+                if (player.row === pos.row && player.col === pos.col) {
+                    // 玩家被炸到，重置位置
+                    resetPlayer();
+                    break;
+                }
+            }
+            
+            // 短暂显示爆炸效果后重新绘制场景
+            setTimeout(() => {
+                drawMaze();
+                markStartEnd();
+                drawPlayer();
+                drawEnemies();
+                drawBombs();
+            }, 300);
+        }
+        
+        /**
          * 标记迷宫的入口和出口
          */
         function markStartEnd() {
@@ -448,6 +585,9 @@
                 case 'ArrowRight': // 右
                     newCol++;
                     break;
+                case ' ': // 空格键放置炸弹
+                    placeBomb();
+                    return;
                 default:
                     return; // 不处理其他按键
             }
@@ -481,6 +621,10 @@
             markStartEnd();
             drawPlayer();
             drawEnemies();
+            drawBombs();
+            
+            // 处理炸弹爆炸
+            handleBombExplosions();
         }
         
         // 监听键盘按键事件
@@ -489,6 +633,15 @@
         // 页面加载完成后自动生成第一个迷宫
         window.onload = function() {
             generateMaze();
+            // 每秒更新一次游戏状态
+            setInterval(() => {
+                drawMaze();
+                markStartEnd();
+                drawPlayer();
+                drawEnemies();
+                drawBombs();
+                handleBombExplosions();
+            }, 1000);
         };
     </script>
 </body>
