@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <!-- 页面元信息 -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>随机迷宫生成器</title>
+    
+    <!-- 页面样式 -->
+    <style>
+        /* 页面整体布局样式 */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        
+        /* 标题样式 */
+        h1 {
+            margin-bottom: 20px;
+        }
+        
+        /* 迷宫容器样式 */
+        #maze-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px;
+        }
+        
+        /* 迷宫画布样式 */
+        #mazeCanvas {
+            border: 2px solid #333;
+            background-color: white;
+        }
+        
+        /* 控制按钮容器样式 */
+        #controls {
+            margin: 20px;
+        }
+        
+        /* 按钮样式 */
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        /* 按钮悬停效果 */
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        /* 游戏说明样式 */
+        #instructions {
+            margin: 10px;
+            text-align: center;
+            max-width: 500px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 页面标题 -->
+    <h1>随机迷宫生成器</h1>
+    
+    <!-- 游戏说明 -->
+    <div id="instructions">
+        <p>使用方向键（↑ ↓ ← →）控制蓝色方块移动。碰到黑色墙体将回到起点。躲避红色敌人！</p>
+    </div>
+    
+    <!-- 迷宫显示容器 -->
+    <div id="maze-container">
+        <canvas id="mazeCanvas" width="500" height="500"></canvas>
+    </div>
+    
+    <!-- 控制按钮区域 -->
+    <div id="controls">
+        <button onclick="generateMaze()">生成新迷宫</button>
+    </div>
+
+    <!-- JavaScript 脚本 -->
+    <script>
+        // 获取画布元素和绘图上下文
+        const canvas = document.getElementById('mazeCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 迷宫配置参数
+        const cellSize = 20;  // 每个单元格的像素大小
+        const rows = Math.floor(canvas.height / cellSize);  // 迷宫行数
+        const cols = Math.floor(canvas.width / cellSize);   // 迷宫列数
+        
+        // 玩家配置参数
+        const playerSize = cellSize / 4; // 玩家方块大小为格子的1/4
+        let player = {
+            row: 0,      // 玩家初始行位置
+            col: 1,      // 玩家初始列位置
+            x: 0,        // 玩家实际x坐标
+            y: 0         // 玩家实际y坐标
+        };
+        
+        // 敌人数组
+        let enemies = [];
+        
+        // 玩家移动计数器（用于控制敌人移动频率）
+        let playerMoveCount = 0;
+        
+        // 起点位置记录
+        const startPosition = {
+            row: 0,
+            col: 1
+        };
+        
+        // 初始化迷宫数组
+        let maze = [];
+        
+        /**
+         * 初始化迷宫数组
+         * 创建一个二维数组，初始时所有单元格都设置为墙体（值为1）
+         */
+        function initMaze() {
+            maze = [];
+            for (let i = 0; i < rows; i++) {
+                maze[i] = [];
+                for (let j = 0; j < cols; j++) {
+                    // 1 表示墙, 0 表示路径
+                    maze[i][j] = 1;
+                }
+            }
+        }
+        
+        /**
+         * 生成迷宫主函数
+         * 初始化迷宫，设置入口和出口，生成路径并绘制迷宫
+         */
+        function generateMaze() {
+            // 初始化迷宫
+            initMaze();
+            
+            // 设置入口位置 (第一行第二个格子)
+            const startRow = 0;
+            const startCol = 1;
+            maze[startRow][startCol] = 0;
+            
+            // 设置出口位置 (最后行倒数第二个格子)
+            const endRow = rows - 2;
+            const endCol = cols - 2;
+            maze[endRow][endCol] = 0;
+            
+            // 从入口开始生成迷宫路径
+            carvePath(startRow, startCol);
+            
+            // 查找所有死角位置用于生成敌人
+            findDeadEnds();
+            
+            // 重置玩家位置到起点
+            resetPlayer();
+            
+            // 重置玩家移动计数器
+            playerMoveCount = 0;
+            
+            // 绘制迷宫图形
+            drawMaze();
+            
+            // 标记入口和出口
+            markStartEnd();
+            
+            // 绘制玩家和敌人
+            drawPlayer();
+            drawEnemies();
+        }
+        
+        /**
+         * 查找迷宫中的所有死角位置，并在其中随机生成敌人
+         */
+        function findDeadEnds() {
+            // 清空敌人数组
+            enemies = [];
+            
+            // 遍历迷宫查找死角
+            const deadEnds = [];
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    // 检查当前位置是否为路径
+                    if (maze[row][col] === 0) {
+                        // 计算四个方向上的开放路径数量
+                        let openPaths = 0;
+                        // 上
+                        if (row > 0 && maze[row - 1][col] === 0) openPaths++;
+                        // 下
+                        if (row < rows - 1 && maze[row + 1][col] === 0) openPaths++;
+                        // 左
+                        if (col > 0 && maze[row][col - 1] === 0) openPaths++;
+                        // 右
+                        if (col < cols - 1 && maze[row][col + 1] === 0) openPaths++;
+                        
+                        // 如果只有一个开放方向，则为死角
+                        if (openPaths === 1) {
+                            deadEnds.push({row, col});
+                        }
+                    }
+                }
+            }
+            
+            // 在死角中随机选择位置生成敌人（最多生成10个敌人）
+            const numEnemies = Math.min(10, deadEnds.length);
+            for (let i = 0; i < numEnemies; i++) {
+                const randomIndex = Math.floor(Math.random() * deadEnds.length);
+                const {row, col} = deadEnds[randomIndex];
+                // 确保敌人不生成在入口或出口
+                if (!((row === 0 && col === 1) || (row === rows - 1 && col === cols - 2))) {
+                    enemies.push({
+                        row: row,
+                        col: col
+                    });
+                }
+                // 从数组中移除已选择的位置
+                deadEnds.splice(randomIndex, 1);
+            }
+        }
+        
+        /**
+         * 重置玩家位置到起点
+         */
+        function resetPlayer() {
+            player.row = startPosition.row;
+            player.col = startPosition.col;
+            player.x = player.col * cellSize + (cellSize - playerSize) / 2;
+            player.y = player.row * cellSize + (cellSize - playerSize) / 2;
+        }
+        
+        /**
+         * 使用深度优先算法递归生成迷宫路径
+         * @param {number} row - 当前单元格行号
+         * @param {number} col - 当前单元格列号
+         */
+        function carvePath(row, col) {
+            // 定义四个可能的移动方向：上、右、下、左
+            const directions = [
+                [-2, 0],  // 上
+                [0, 2],   // 右
+                [2, 0],   // 下
+                [0, -2]   // 左
+            ];
+            
+            // 随机打乱方向顺序，使迷宫更加随机
+            shuffleArray(directions);
+            
+            // 尝试向每个方向移动
+            for (let [deltaRow, deltaCol] of directions) {
+                const newRow = row + deltaRow;
+                const newCol = col + deltaCol;
+                
+                // 检查目标单元格是否在边界内且未被访问过（仍为墙体）
+                if (newRow > 0 && newRow < rows - 1 && 
+                    newCol > 0 && newCol < cols - 1 && 
+                    maze[newRow][newCol] === 1) {
+                    
+                    // 打通当前单元格和目标单元格之间的墙
+                    maze[newRow][newCol] = 0;
+                    maze[row + deltaRow / 2][col + deltaCol / 2] = 0;
+                    
+                    // 递归调用，继续从新单元格挖掘路径
+                    carvePath(newRow, newCol);
+                }
+            }
+        }
+        
+        /**
+         * 随机打乱数组元素顺序（Fisher-Yates 算法）
+         * @param {Array} array - 需要打乱的数组
+         */
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                // 随机选择一个元素
+                const j = Math.floor(Math.random() * (i + 1));
+                // 交换元素位置
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+        
+        /**
+         * 绘制迷宫到画布上
+         */
+        function drawMaze() {
+            // 清空画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制墙体（黑色方块）
+            ctx.fillStyle = 'black';
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    if (maze[row][col] === 1) {
+                        ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+            
+            // 绘制网格线（黑色直线）
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 1;
+            
+            // 绘制垂直线
+            for (let x = 0; x <= canvas.width; x += cellSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            // 绘制水平线
+            for (let y = 0; y <= canvas.height; y += cellSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+        
+        /**
+         * 绘制玩家方块
+         */
+        function drawPlayer() {
+            // 计算玩家在画布上的实际坐标（居中于所在格子）
+            player.x = player.col * cellSize + (cellSize - playerSize) / 2;
+            player.y = player.row * cellSize + (cellSize - playerSize) / 2;
+            
+            // 绘制蓝色玩家方块
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(player.x, player.y, playerSize, playerSize);
+        }
+        
+        /**
+         * 绘制所有敌人
+         */
+        function drawEnemies() {
+            // 敌人大小与玩家相同
+            const enemySize = playerSize;
+            
+            // 绘制每个红色敌人
+            ctx.fillStyle = 'red';
+            for (let enemy of enemies) {
+                const x = enemy.col * cellSize + (cellSize - enemySize) / 2;
+                const y = enemy.row * cellSize + (cellSize - enemySize) / 2;
+                ctx.fillRect(x, y, enemySize, enemySize);
+            }
+        }
+        
+        /**
+         * 标记迷宫的入口和出口
+         */
+        function markStartEnd() {
+            // 入口 - 绿色方块
+            ctx.fillStyle = 'green';
+            ctx.fillRect(1 * cellSize, 0 * cellSize, cellSize, cellSize);
+            
+            // 出口 - 红色方块
+            ctx.fillStyle = 'red';
+            ctx.fillRect((cols - 2) * cellSize, (rows - 1) * cellSize, cellSize, cellSize);
+        }
+        
+        /**
+         * 检查玩家是否与墙体碰撞
+         * @param {number} row - 目标行位置
+         * @param {number} col - 目标列位置
+         * @returns {boolean} 是否发生碰撞
+         */
+        function checkCollision(row, col) {
+            // 检查是否超出边界
+            if (row < 0 || row >= rows || col < 0 || col >= cols) {
+                return true;
+            }
+            
+            // 检查是否撞到墙体
+            return maze[row][col] === 1;
+        }
+        
+        /**
+         * 检查玩家是否与敌人碰撞
+         * @returns {boolean} 是否与敌人碰撞
+         */
+        function checkEnemyCollision() {
+            for (let enemy of enemies) {
+                if (player.row === enemy.row && player.col === enemy.col) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        /**
+         * 移动所有敌人
+         */
+        function moveEnemies() {
+            for (let enemy of enemies) {
+                // 获取可能的移动方向
+                const possibleMoves = [];
+                
+                // 上
+                if (enemy.row > 0 && maze[enemy.row - 1][enemy.col] === 0) {
+                    possibleMoves.push({row: -1, col: 0});
+                }
+                // 下
+                if (enemy.row < rows - 1 && maze[enemy.row + 1][enemy.col] === 0) {
+                    possibleMoves.push({row: 1, col: 0});
+                }
+                // 左
+                if (enemy.col > 0 && maze[enemy.row][enemy.col - 1] === 0) {
+                    possibleMoves.push({row: 0, col: -1});
+                }
+                // 右
+                if (enemy.col < cols - 1 && maze[enemy.row][enemy.col + 1] === 0) {
+                    possibleMoves.push({row: 0, col: 1});
+                }
+                
+                // 如果有可移动方向，则随机选择一个方向移动
+                if (possibleMoves.length > 0) {
+                    const move = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                    enemy.row += move.row;
+                    enemy.col += move.col;
+                }
+            }
+        }
+        
+        /**
+         * 处理键盘按键事件
+         * @param {KeyboardEvent} event - 键盘事件对象
+         */
+        function handleKeyPress(event) {
+            let newRow = player.row;
+            let newCol = player.col;
+            
+            // 根据按键确定移动方向
+            switch (event.key) {
+                case 'ArrowUp':    // 上
+                    newRow--;
+                    break;
+                case 'ArrowDown':  // 下
+                    newRow++;
+                    break;
+                case 'ArrowLeft':  // 左
+                    newCol--;
+                    break;
+                case 'ArrowRight': // 右
+                    newCol++;
+                    break;
+                default:
+                    return; // 不处理其他按键
+            }
+            
+            // 检查是否发生碰撞
+            if (checkCollision(newRow, newCol)) {
+                // 碰撞墙体后重置玩家位置到起点
+                //resetPlayer();
+            } else {
+                // 更新玩家位置
+                player.row = newRow;
+                player.col = newCol;
+                
+                // 增加玩家移动计数
+                playerMoveCount++;
+                
+                // 玩家每移动3次，敌人移动一次
+                if (playerMoveCount % 3 === 0) {
+                    moveEnemies();
+                }
+            }
+            
+            // 检查是否与敌人碰撞
+            if (checkEnemyCollision()) {
+                // 与敌人碰撞后重置玩家位置到起点
+                resetPlayer();
+            }
+            
+            // 重新绘制迷宫、玩家和敌人
+            drawMaze();
+            markStartEnd();
+            drawPlayer();
+            drawEnemies();
+        }
+        
+        // 监听键盘按键事件
+        document.addEventListener('keydown', handleKeyPress);
+        
+        // 页面加载完成后自动生成第一个迷宫
+        window.onload = function() {
+            generateMaze();
+        };
+    </script>
+</body>
+</html>
