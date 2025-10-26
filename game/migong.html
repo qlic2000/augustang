@@ -16,29 +16,36 @@
             font-family: Arial, sans-serif;
             background-color: #f0f0f0;
             touch-action: manipulation; /* 防止触摸时的默认行为 */
+            margin: 0;
+            padding: 0;
         }
         
         /* 标题样式 */
         h1 {
-            margin-bottom: 20px;
+            margin: 10px 0;
         }
         
         /* 迷宫容器样式 */
         #maze-container {
             display: flex;
             justify-content: center;
-            margin: 20px;
+            margin: 10px;
+            width: 100%;
+            max-width: 500px;
         }
         
         /* 迷宫画布样式 */
         #mazeCanvas {
             border: 2px solid #333;
             background-color: white;
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 1 / 1;
         }
         
         /* 控制按钮容器样式 */
         #controls {
-            margin: 20px;
+            margin: 10px;
         }
         
         /* 按钮样式 */
@@ -74,6 +81,7 @@
             padding: 0 20px;
             box-sizing: border-box;
             pointer-events: none; /* 防止容器拦截点击事件 */
+            z-index: 1000; /* 确保按钮在最上层 */
         }
         
         /* 方向键容器 */
@@ -163,12 +171,11 @@
         const ctx = canvas.getContext('2d');
         
         // 迷宫配置参数
-        const cellSize = 20;  // 每个单元格的像素大小
-        const rows = Math.floor(canvas.height / cellSize);  // 迷宫行数
-        const cols = Math.floor(canvas.width / cellSize);   // 迷宫列数
+        let cellSize = 20;  // 每个单元格的像素大小
+        let rows, cols;     // 迷宫行列数（将在adjustCanvasSize中初始化）
         
         // 玩家配置参数
-        const playerSize = cellSize - 2; // 玩家方块大小扩大到几乎填满整个格子
+        let playerSize = cellSize - 2; // 玩家方块大小（将在adjustCanvasSize中初始化）
         let player = {
             row: 0,      // 玩家初始行位置
             col: 1,      // 玩家初始列位置
@@ -213,10 +220,40 @@
         }
         
         /**
+         * 根据屏幕大小调整画布尺寸
+         */
+        function adjustCanvasSize() {
+            if (isMobileDevice()) {
+                // 在移动设备上，根据屏幕尺寸设置画布大小
+                const maxWidth = Math.min(window.innerWidth - 40, 500);
+                canvas.width = maxWidth;
+                canvas.height = maxWidth;
+                
+                // 根据画布大小动态调整单元格大小，确保至少有15x15的迷宫
+                cellSize = Math.max(15, Math.min(25, Math.floor(maxWidth / 20)));
+            } else {
+                // 在PC上保持原始大小和单元格大小
+                canvas.width = 500;
+                canvas.height = 500;
+                cellSize = 20;
+            }
+            
+            // 更新行列数
+            rows = Math.floor(canvas.height / cellSize);
+            cols = Math.floor(canvas.width / cellSize);
+            
+            // 更新玩家大小
+            playerSize = Math.max(10, cellSize - 2);
+        }
+        
+        /**
          * 生成迷宫主函数
          * 初始化迷宫，设置入口和出口，生成路径并绘制迷宫
          */
         function generateMaze() {
+            // 调整画布大小以适应不同设备
+            adjustCanvasSize();
+            
             // 清除之前的敌人移动定时器
             if (enemyMoveInterval) {
                 clearInterval(enemyMoveInterval);
@@ -308,7 +345,7 @@
                 const randomIndex = Math.floor(Math.random() * deadEnds.length);
                 const {row, col} = deadEnds[randomIndex];
                 // 确保敌人不生成在入口或出口
-                if (!((row === 0 && col === 1) || (row === rows - 1 && col === cols - 2))) {
+                if (!((row === 0 && col === 1) || (row === rows - 2 && col === cols - 2))) {
                     enemies.push({
                         row: row,
                         col: col
@@ -452,7 +489,7 @@
         function drawBombs() {
             ctx.fillStyle = 'black';
             for (let bomb of bombs) {
-                const bombSize = playerSize / 2;
+                const bombSize = Math.max(6, playerSize / 2);
                 const x = bomb.col * cellSize + (cellSize - bombSize) / 2;
                 const y = bomb.row * cellSize + (cellSize - bombSize) / 2;
                 ctx.fillRect(x, y, bombSize, bombSize);
@@ -474,7 +511,7 @@
             const bomb = {
                 row: player.row,
                 col: player.col,
-                timer: 6 // 6秒后爆炸
+                timer: 7 // 7秒后爆炸
             };
             bombs.push(bomb);
             drawBombs();
@@ -590,7 +627,7 @@
             
             // 出口 - 红色方块
             ctx.fillStyle = 'red';
-            ctx.fillRect((cols - 2) * cellSize, (rows - 1) * cellSize, cellSize, cellSize);
+            ctx.fillRect((cols - 2) * cellSize, (rows - 2) * cellSize, cellSize, cellSize);
         }
         
         /**
@@ -627,7 +664,7 @@
          * @returns {boolean} 是否到达出口
          */
         function checkWin() {
-            // 出口位置在倒数第二行，最后一列
+            // 出口位置在倒数第二行，倒数第二列（与迷宫生成和标记位置一致）
             return player.row === rows - 2 && player.col === cols - 2;
         }
         
@@ -844,6 +881,13 @@
                 });
             }
         };
+        
+        // 窗口大小改变时重新调整画布
+        window.addEventListener('resize', function() {
+            if (isMobileDevice()) {
+                generateMaze();
+            }
+        });
     </script>
 </body>
 </html>
